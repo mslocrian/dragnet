@@ -1,1 +1,1 @@
-# Sausage Cluster Latency Tracking
+# Sausage: A Cluster Latency Tracking Tool

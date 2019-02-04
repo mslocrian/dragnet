@@ -1,0 +1,8 @@
+/sausage
+env
+*.swp
+*.key
+*.bak
+*.idea
+.vscode
+debug

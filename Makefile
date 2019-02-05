@@ -5,7 +5,7 @@ pkgs=$(shell $(GO) list ./... | egrep -v ("vendor)")
 
 export DOCKERHUB_REPO=sausage
 export DOCKERHUB_USER=mslocrian
-export SAUSAGE_VERSION=0.0.1
+export SAUSAGE_VERSION=0.0.4
 export VERSION=v$(SAUSAGE_VERSION)
 
 build:

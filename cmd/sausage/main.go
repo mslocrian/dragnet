@@ -38,7 +38,7 @@ var (
 	}
 	probeSuccessGauge  *prometheus.GaugeVec
 	probeDurationGauge *prometheus.GaugeVec
-    registry    *prometheus.Registry
+	registry           *prometheus.Registry
 	sausageVersion     string
 	timeoutOffset      = flag.Float64("timeout-offset", 0.5, "Offset to subtract from probe timeout in seconds.")
 )
@@ -83,6 +83,7 @@ func generateHandler(w http.ResponseWriter, r *http.Request) {
 
 func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, registry *prometheus.Registry) {
 	var wg = sync.WaitGroup{}
+	var source string
 	_ = wg
 	targets := c.GetTargets()
 
@@ -108,7 +109,11 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 
 	prober := prober.ProbeHTTP
 	module := c.Modules["http_2xx"]
-	source := os.Getenv("SAUSAGE_HOST")
+	if c.SourceHost != "" {
+		source = environment.GetVar(c.SourceHost)
+	} else {
+		source = environment.GetVar("env:SAUSAGE_HOST")
+	}
 	for target := range targets {
 		start := time.Now()
 		success := prober(ctx, source, target, module, registry)
@@ -163,6 +168,7 @@ func main() {
 		configLogLevel = flag.String("log.level", "info", "The sausage log level. Log levels are: debug, info, warn, error, fatal, panic.")
 		configFile     = flag.String("config.file", "/etc/sausage.yml", "The sausage configuration file.")
 		listenAddress  = flag.String("web.listen-address", ":9600", "The address to listen on for HTTP requests.")
+		sourceHost     = flag.String("config.source-host", "", "The address to set source host in metrics (default: $SAUSAGE_HOST)")
 		versionFlag    = flag.Bool("version", false, "Print version information.")
 	)
 	flag.Parse()
@@ -181,6 +187,10 @@ func main() {
 	if *configCheck {
 		log.Infof("Config file is ok. Exiting...")
 		os.Exit(0)
+	}
+
+	if *sourceHost != "" {
+		sc.C.SourceHost = environment.GetVar(*sourceHost)
 	}
 
 	registry = prometheus.NewRegistry()
@@ -205,9 +215,9 @@ func main() {
 					rc <- err
 				} else {
 					log.Info("Reloaded config file.")
-	                registry = prometheus.NewRegistry()
-	                registry.MustRegister(probeSuccessGauge)
-	                registry.MustRegister(probeDurationGauge)
+					registry = prometheus.NewRegistry()
+					registry.MustRegister(probeSuccessGauge)
+					registry.MustRegister(probeDurationGauge)
 					rc <- nil
 				}
 			}
@@ -227,9 +237,9 @@ func main() {
 				http.Error(w, fmt.Sprintf("failed to reload config: %s", err), http.StatusInternalServerError)
 			}
 			fmt.Fprintf(w, "Configuration reloaded!\n")
-	        registry = prometheus.NewRegistry()
-	        registry.MustRegister(probeSuccessGauge)
-	        registry.MustRegister(probeDurationGauge)
+			registry = prometheus.NewRegistry()
+			registry.MustRegister(probeSuccessGauge)
+			registry.MustRegister(probeDurationGauge)
 		})
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

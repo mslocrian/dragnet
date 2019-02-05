@@ -312,9 +312,9 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 	}
 
 	request, err := http.NewRequest(httpConfig.Method, targetURL.String(), body)
-    query := request.URL.Query()
-    query.Add("size", fmt.Sprintf("%v", requestSize))
-    request.URL.RawQuery = query.Encode()
+	query := request.URL.Query()
+	query.Add("size", fmt.Sprintf("%v", requestSize))
+	request.URL.RawQuery = query.Encode()
 	request.Host = origHost
 	request = request.WithContext(ctx)
 	if err != nil {

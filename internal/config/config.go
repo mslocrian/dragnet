@@ -13,10 +13,11 @@ import (
 )
 
 type Config struct {
-	Includes []string          `yaml:"include"`
-	Modules  map[string]Module `yaml:"modules"`
-	Targets  []string          `yaml:"targets"`
-	targets  map[string]bool
+	Includes   []string          `yaml:"include"`
+	Modules    map[string]Module `yaml:"modules"`
+	Targets    []string          `yaml:"targets"`
+	SourceHost string            `yaml:"source_host"`
+	targets    map[string]bool
 }
 
 type SafeConfig struct {

@@ -36,9 +36,11 @@ var (
 	sc = &config.SafeConfig{
 		C: &config.Config{},
 	}
+    /*
     AutoTargets = map[string]discovery.AutoTargetFn{
         "dcos": discovery.AutoTargetDCOS
     }
+    */
 	probeSuccessGauge  *prometheus.GaugeVec
 	probeDurationGauge *prometheus.GaugeVec
 	registry           *prometheus.Registry

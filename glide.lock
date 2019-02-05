@@ -1,22 +1,33 @@
-hash: ae01dcd1a169f24363439f53534fa77bab74fda089c57484a6d75dc205572ab3
-updated: 2019-02-04T13:25:20.013342141-08:00
+hash: 60291419cfb6a7836629ca6caef8e7aa53ea1dacb9f69d2a132153f5f83b9a9c
+updated: 2019-02-05T10:53:21.885900009-08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
   - quantile
+- name: github.com/go-kit/kit
+  version: 099aba3da8224a6beae2887b290b2b0e8952a797
+  subpackages:
+  - log
+  - log/level
+- name: github.com/go-logfmt/logfmt
+  version: 07c9b44f60d7ffdfb7d8efe1ad539965737836dc
 - name: github.com/golang/protobuf
   version: 347cf4a86c1cb8d262994d8ef5924d4576c5b331
   subpackages:
   - proto
 - name: github.com/konsorten/go-windows-terminal-sequences
   version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
+- name: github.com/kr/logfmt
+  version: b84e30acd515aadc4b783ad4ff83aff3299bdfe0
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c182affec369e30f25d3eb8cd8a478dee585ae7d
   subpackages:
   - pbutil
 - name: github.com/mwitkow/go-conntrack
   version: cc309e4a22231782e8893f3c35ced0967807a33e
+- name: github.com/pkg/errors
+  version: ba968bfe8b2f7e042a574c888954fccecfa385b4
 - name: github.com/prometheus/client_golang
   version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
@@ -34,6 +45,7 @@ imports:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
+  - promlog
   - version
 - name: github.com/prometheus/procfs
   version: 488faf799f863e27e50c516468f76ae8f1da20a5
@@ -41,6 +53,12 @@ imports:
   - internal/util
   - nfs
   - xfs
+- name: github.com/prometheus/prometheus
+  version: 62e591f928ddf6b3468308b7ac1de1c63aa7fcf3
+  subpackages:
+  - discovery/marathon
+  - discovery/targetgroup
+  - util/strutil
 - name: github.com/sirupsen/logrus
   version: e1e72e9de974bd926e5c56f83753fba2df402ce5
 - name: golang.org/x/crypto
@@ -61,14 +79,6 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 51d6538a90f86fe93ac480b35f37b2be17fef232
 testImports:
-- name: github.com/go-kit/kit
-  version: 099aba3da8224a6beae2887b290b2b0e8952a797
-  subpackages:
-  - log
-- name: github.com/go-logfmt/logfmt
-  version: 07c9b44f60d7ffdfb7d8efe1ad539965737836dc
-- name: github.com/kr/logfmt
-  version: b84e30acd515aadc4b783ad4ff83aff3299bdfe0
 - name: github.com/kr/pretty
   version: 73f6ac0b30a98e433b289500d779f50c1a6f0712
 - name: github.com/kr/text

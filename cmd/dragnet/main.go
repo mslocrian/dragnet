@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mslocrian/dragnet/internal/config"
+	//"github.com/mslocrian/dragnet/internal/discovery"
 	"github.com/mslocrian/dragnet/internal/environment"
 	"github.com/mslocrian/dragnet/internal/probers"
 
@@ -36,11 +37,13 @@ var (
 	sc = &config.SafeConfig{
 		C: &config.Config{},
 	}
+
     /*
     AutoTargets = map[string]discovery.AutoTargetFn{
         "dcos": discovery.AutoTargetDCOS
     }
     */
+
 	probeSuccessGauge  *prometheus.GaugeVec
 	probeDurationGauge *prometheus.GaugeVec
 	registry           *prometheus.Registry
@@ -188,8 +191,9 @@ func main() {
 	var (
 		configCheck    = flag.Bool("config.check", false, "Validate the config file and exit.")
 		configLogLevel = flag.String("log.level", "info", "The dragnet log level. Log levels are: debug, info, warn, error, fatal, panic.")
-		configFile     = flag.String("config.file", "/etc/dragnet.yml", "The dragnet configuration file.")
-		listenAddress  = flag.String("web.listen-address", ":9600", "The address to listen on for HTTP requests.")
+		configFile     = flag.String("config.file", "/etc/dragnet/dragnet.yml", "The dragnet configuration file.")
+		listenAddress  = flag.String("web.listen-address", "0.0.0.0", "The address to listen on for HTTP requests.")
+		listenPort  = flag.String("web.listen-port", "9600", "The address to listen on for HTTP requests.")
 		sourceHost     = flag.String("config.source-host", "", "The address to set source host in metrics (default: $SAUSAGE_HOST)")
 		versionFlag    = flag.Bool("version", false, "Print version information.")
 	)
@@ -282,8 +286,11 @@ func main() {
 		generateHandler(w, r)
 	})
 
-	log.Infof("dragnet listening on address %v", *listenAddress)
-	if err := http.ListenAndServe(*listenAddress, nil); err != nil {
+    address := environment.GetVar(*listenAddress)
+    port := environment.GetVar(*listenPort)
+    addressPort := fmt.Sprintf("%v:%v", address, port)
+    log.Infof("dragnet listening on address %v", addressPort)
+	if err := http.ListenAndServe(addressPort, nil); err != nil {
 		log.Fatalf("Error starting HTTP server! err=%v", err)
 	}
 	os.Exit(0)

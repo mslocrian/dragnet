@@ -1,23 +1,31 @@
 package config
 
 import (
+    "context"
 	"fmt"
 	"io/ioutil"
+    "strings"
 	"sync"
 	"time"
 
+    //log2 "github.com/go-kit/kit/log"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/prometheus/common/config"
+	"github.com/prometheus/common/model"
+    "github.com/prometheus/common/promlog"
+    "github.com/prometheus/prometheus/discovery/marathon"
+    "github.com/prometheus/prometheus/discovery/targetgroup"
 )
 
 type Config struct {
-	Includes   []string          `yaml:"include"`
-	Modules    map[string]Module `yaml:"modules"`
-	Targets    []string          `yaml:"targets"`
-	SourceHost string            `yaml:"source_host"`
-	targets    map[string]bool
+	AutoTargets map[string]AutoTarget `yaml:"autotargets"`
+	Includes    []string               `yaml:"include"`
+	Modules     map[string]Module      `yaml:"modules"`
+	Targets     []string               `yaml:"targets"`
+	SourceHost  string                 `yaml:"source_host"`
+	targets     map[string]bool
 }
 
 type SafeConfig struct {
@@ -25,11 +33,11 @@ type SafeConfig struct {
 	C *Config
 }
 
-func (s *SafeConfig) ReloadConfig(config string) error {
+func (s *SafeConfig) ReloadConfig(cfg string) error {
 	var c = &Config{}
 	var targets map[string]bool
 
-	yamlFile, err := ioutil.ReadFile(config)
+	yamlFile, err := ioutil.ReadFile(cfg)
 	if err != nil {
 		return fmt.Errorf("Error reading config file: %s", err)
 	}
@@ -50,11 +58,47 @@ func (s *SafeConfig) ReloadConfig(config string) error {
 			log.Errorf("Could not parse included config file: %s. Ignoring...", err)
 			continue
 		}
-		log.Debugf("include=%v", include)
 		for _, target := range includeC.Targets {
 			targets[target] = true
 		}
 	}
+    // all this stuff from here -->
+    for key, _ := range c.AutoTargets {
+        if strings.ToLower(key) == "dcos" {
+            atConfig := c.AutoTargets[key]
+
+            sdConfig := marathon.SDConfig{Servers: atConfig.Servers,
+                RefreshInterval: atConfig.RefreshInterval,
+                HTTPClientConfig: atConfig.HTTPClientConfig}
+            ctx := context.Background()
+            ts := make(chan []*targetgroup.Group)
+            promlogLevel := &promlog.AllowedLevel{}
+            promlogLevel.Set("debug")
+            promlogFormat := &promlog.AllowedFormat{}
+            promlogFormat.Set("logfmt")
+            promlogConfig := &promlog.Config{Level: promlogLevel,
+                                            Format: promlogFormat}
+            logger := promlog.New(promlogConfig)
+            discovery, err := marathon.NewDiscovery(sdConfig, logger)
+            if err != nil {
+                // stegen - perhaps do something else here?
+                continue
+            }
+            go discovery.Run(ctx, ts)
+            newTargets := <-ts
+            for _, target := range newTargets {
+                // do the service names match? that's what we are interested in!
+                if atConfig.ServiceName == target.Source {
+                    for _, label := range target.Targets {
+                        t := string(label["__address__"])
+                        log.Debugf("t=%v", t)
+                        targets[t] = true
+                    }
+                }
+            }
+        }
+        // to here, needs to be re-thought out. 
+    }
 	for _, target := range c.Targets {
 		targets[target] = true
 	}
@@ -68,6 +112,14 @@ func (s *SafeConfig) ReloadConfig(config string) error {
 
 func (c *Config) GetTargets() map[string]bool {
 	return c.targets
+}
+
+type AutoTarget struct {
+    Servers []string `yaml:"servers,omitempty"`
+    ServiceName string `yaml:"service_name"`
+    RefreshInterval model.Duration `yaml:"refresh_interval,omitempty"`
+    AuthToken config.Secret `yaml:"auth_token"`
+    HTTPClientConfig config.HTTPClientConfig `yaml:",inline"`
 }
 
 type Module struct {

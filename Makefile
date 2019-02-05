@@ -3,19 +3,19 @@ SHELL=/bin/bash
 GO := go
 pkgs=$(shell $(GO) list ./... | egrep -v ("vendor)")
 
-export DOCKERHUB_REPO=sausage
+export DOCKERHUB_REPO=dragnet
 export DOCKERHUB_USER=mslocrian
-export SAUSAGE_VERSION=0.0.1
+export SAUSAGE_VERSION=0.0.5
 export VERSION=v$(SAUSAGE_VERSION)
 
 build:
 	@docker build -f Dockerfile -t $(DOCKERHUB_REPO):$(SAUSAGE_VERSION) .
 
 build-local: format
-	@echo ">> removing old sausage"
-	@rm -f sausage
-	@echo ">> building sausage"
-	@go build -o sausage ./cmd/sausage/main.go
+	@echo ">> removing old dragnet"
+	@rm -f dragnet
+	@echo ">> building dragnet"
+	@go build -o dragnet ./cmd/dragnet/main.go
 
 format:
 	@echo ">> formatting go files"
@@ -29,4 +29,4 @@ push:
 	docker push $(DOCKERHUB_USER)/$(DOCKERHUB_REPO):$(SAUSAGE_VERSION)
 
 run:
-	$(GO) run -ldflags "-X main.version=$(VERSION)" cmd/sausage/main.go -log.level debug -config.file ./sausage.yml
+	$(GO) run -ldflags "-X main.version=$(VERSION)" cmd/dragnet/main.go -log.level debug -config.file ./dragnet.yml

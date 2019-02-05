@@ -22,7 +22,7 @@ func chooseProtocol(IPProtocol string, fallbackIPProtocol bool, source string, t
 	metricsMutex.Lock()
 	if probeDNSLookupTimeSeconds == nil {
 		probeDNSLookupTimeSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_dns_lookup_time_seconds",
+			Name: "dragnet_probe_dns_lookup_time_seconds",
 			Help: "Returns the time taken for probe dns lookup in seconds",
 		}, []string{"source", "target"})
 		registry.MustRegister(probeDNSLookupTimeSeconds)
@@ -30,7 +30,7 @@ func chooseProtocol(IPProtocol string, fallbackIPProtocol bool, source string, t
 
 	if probeIPProtocolGauge == nil {
 		probeIPProtocolGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_ip_protocol",
+			Name: "dragnet_probe_ip_protocol",
 			Help: "Specifies whether probe ip protocol is IP4 or IP6",
 		}, []string{"source", "target"})
 		registry.MustRegister(probeIPProtocolGauge)

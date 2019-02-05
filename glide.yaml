@@ -1,4 +1,4 @@
-package: github.com/mslocrian/sausage
+package: github.com/mslocrian/dragnet
 import:
 - package: github.com/prometheus/client_golang
   version: ^0.9.2

@@ -29,7 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	pconfig "github.com/prometheus/common/config"
 
-	"github.com/mslocrian/sausage/internal/config"
+	"github.com/mslocrian/dragnet/internal/config"
 )
 
 func TestHTTPStatusCodes(t *testing.T) {

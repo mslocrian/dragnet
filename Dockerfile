@@ -4,13 +4,13 @@ LABEL maintainer="Stegen Smith <stegen@owns.com>"
 RUN apk update && apk add alpine-sdk autoconf automake bash python py-pip && \
     rm -rf /var/cache/apk/*
 
-WORKDIR /go/src/github.com/mslocrian/sausage
+WORKDIR /go/src/github.com/mslocrian/dragnet
 
 COPY . .
 RUN make build-local
 
 FROM alpine:3.9
 WORKDIR /usr/local
-COPY --from=0 /go/src/github.com/mslocrian/sausage/sausage .
-COPY --from=0 /go/src/github.com/mslocrian/sausage/sausage.yml /etc/sausage.yml
-ENTRYPOINT ["/usr/local/sausage"]
+COPY --from=0 /go/src/github.com/mslocrian/dragnet/dragnet .
+COPY --from=0 /go/src/github.com/mslocrian/dragnet/dragnet.yml /etc/dragnet.yml
+ENTRYPOINT ["/usr/local/dragnet"]

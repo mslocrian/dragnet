@@ -38,7 +38,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/publicsuffix"
 
-	"github.com/mslocrian/sausage/internal/config"
+	"github.com/mslocrian/dragnet/internal/config"
 )
 
 var (
@@ -155,7 +155,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 	metricsMutex.Lock()
 	if durationGaugeVec == nil {
 		durationGaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_duration_seconds",
+			Name: "dragnet_probe_http_duration_seconds",
 			Help: "Duration of http request by phase, summed over all redirects",
 		}, []string{"phase", "source", "target"})
 		registry.MustRegister(durationGaugeVec)
@@ -163,7 +163,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if contentLengthGauge == nil {
 		contentLengthGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_content_length",
+			Name: "dragnet_probe_http_content_length",
 			Help: "Length of http content response",
 		}, []string{"source", "target"})
 		registry.MustRegister(contentLengthGauge)
@@ -171,7 +171,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if redirectsGauge == nil {
 		redirectsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_redirects",
+			Name: "dragnet_probe_http_redirects",
 			Help: "The number of redirects",
 		}, []string{"source", "target"})
 		registry.MustRegister(redirectsGauge)
@@ -179,7 +179,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if isSSLGauge == nil {
 		isSSLGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_ssl",
+			Name: "dragnet_probe_http_ssl",
 			Help: "Indicates if SSL was used for the final redirect",
 		}, []string{"source", "target"})
 		registry.MustRegister(isSSLGauge)
@@ -187,7 +187,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if statusCodeGauge == nil {
 		statusCodeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_status_code",
+			Name: "dragnet_probe_http_status_code",
 			Help: "Response HTTP status code",
 		}, []string{"source", "target"})
 		registry.MustRegister(statusCodeGauge)
@@ -195,7 +195,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if probeSSLEarliestCertExpiryGauge == nil {
 		probeSSLEarliestCertExpiryGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_ssl_earliest_cert_expiry",
+			Name: "dragnet_probe_ssl_earliest_cert_expiry",
 			Help: "Returns earliest SSL cert expiry in unixtime",
 		}, []string{"source", "target"})
 		registry.MustRegister(probeSSLEarliestCertExpiryGauge)
@@ -203,7 +203,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if probeHTTPVersionGauge == nil {
 		probeHTTPVersionGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_version",
+			Name: "dragnet_probe_http_version",
 			Help: "Returns the version of HTTP of the probe response",
 		}, []string{"source", "target"})
 		registry.MustRegister(probeHTTPVersionGauge)
@@ -211,7 +211,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if probeFailedDueToRegex == nil {
 		probeFailedDueToRegex = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_failed_due_to_regex",
+			Name: "dragnet_probe_failed_due_to_regex",
 			Help: "Indicates if probe failed due to regex",
 		}, []string{"source", "target"})
 		registry.MustRegister(probeFailedDueToRegex)
@@ -219,7 +219,7 @@ func ProbeHTTP(ctx context.Context, source string, target string, module config.
 
 	if probeHTTPLastModified == nil {
 		probeHTTPLastModified = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "sausage_probe_http_last_modified_timestamp_seconds",
+			Name: "dragnet_probe_http_last_modified_timestamp_seconds",
 			Help: "Returns the Last-Modified HTTP response header in unixtime",
 		}, []string{"source", "target"})
 		registry.MustRegister(probeHTTPLastModified)

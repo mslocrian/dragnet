@@ -1,10 +1,6 @@
 package zipkin
 
-import (
-	"net/http"
-
-	"github.com/go-kit/kit/log"
-)
+import "github.com/go-kit/kit/log"
 
 // TracerOption allows for functional options to our Zipkin tracing middleware.
 type TracerOption func(o *tracerOptions)
@@ -50,18 +46,9 @@ func AllowPropagation(propagate bool) TracerOption {
 	}
 }
 
-// RequestSampler allows one to set the sampling decision based on the details
-// found in the http.Request.
-func RequestSampler(sampleFunc func(r *http.Request) bool) TracerOption {
-	return func(o *tracerOptions) {
-		o.requestSampler = sampleFunc
-	}
-}
-
 type tracerOptions struct {
-	tags           map[string]string
-	name           string
-	logger         log.Logger
-	propagate      bool
-	requestSampler func(r *http.Request) bool
+	tags      map[string]string
+	name      string
+	logger    log.Logger
+	propagate bool
 }

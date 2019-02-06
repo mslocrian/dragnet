@@ -45,7 +45,7 @@ func (i iface) httpHandler() ast.Decl {
 	return handlerFn
 }
 
-func (i iface) receiver() *ast.Field {
+func (i iface) reciever() *ast.Field {
 	return field(i.receiverName(), i.stubName())
 }
 

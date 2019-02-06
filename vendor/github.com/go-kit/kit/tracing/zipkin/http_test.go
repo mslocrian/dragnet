@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	zipkin "github.com/openzipkin/zipkin-go"
+	"github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
 	"github.com/openzipkin/zipkin-go/propagation/b3"
 	"github.com/openzipkin/zipkin-go/reporter/recorder"
@@ -27,7 +27,7 @@ const (
 	testTagValue = "test_value"
 )
 
-func TestHTTPClientTracePropagatesParentSpan(t *testing.T) {
+func TestHttpClientTracePropagatesParentSpan(t *testing.T) {
 	rec := recorder.NewReporter()
 	defer rec.Close()
 
@@ -166,7 +166,7 @@ func TestHTTPServerTrace(t *testing.T) {
 	rec := recorder.NewReporter()
 	defer rec.Close()
 
-	// explicitly show we use the default of RPC shared spans in Zipkin as it
+	// explicitely show we use the default of RPC shared spans in Zipkin as it
 	// is idiomatic for Zipkin to share span identifiers between client and
 	// server side.
 	tr, _ := zipkin.NewTracer(rec, zipkin.WithSharedSpans(true))
@@ -218,43 +218,5 @@ func TestHTTPServerTrace(t *testing.T) {
 
 	if want, have := http.StatusText(500), spans[0].Tags["error"]; want != have {
 		t.Fatalf("incorrect error tag, want %s, have %s", want, have)
-	}
-}
-
-func TestHTTPServerTraceIsRequestBasedSampled(t *testing.T) {
-	rec := recorder.NewReporter()
-	defer rec.Close()
-
-	const httpMethod = "DELETE"
-
-	tr, _ := zipkin.NewTracer(rec)
-
-	handler := kithttp.NewServer(
-		endpoint.Nop,
-		func(context.Context, *http.Request) (interface{}, error) { return nil, nil },
-		func(context.Context, http.ResponseWriter, interface{}) error { return nil },
-		zipkinkit.HTTPServerTrace(tr, zipkinkit.RequestSampler(func(r *http.Request) bool {
-			return r.Method == httpMethod
-		})),
-	)
-
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	req, err := http.NewRequest(httpMethod, server.URL, nil)
-	if err != nil {
-		t.Fatalf("unable to create HTTP request: %s", err.Error())
-	}
-
-	client := http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("unable to send HTTP request: %s", err.Error())
-	}
-	resp.Body.Close()
-
-	spans := rec.Flush()
-	if want, have := 1, len(spans); want != have {
-		t.Fatalf("incorrect number of spans, want %d, have %d", want, have)
 	}
 }

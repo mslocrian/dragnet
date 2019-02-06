@@ -7,6 +7,7 @@ RUN apk update && apk add alpine-sdk autoconf automake bash python py-pip && \
 WORKDIR /go/src/github.com/mslocrian/dragnet
 
 COPY . .
+RUN rm -rf vendor/github.com/prometheus/prometheus/vendor
 RUN make build-local
 
 FROM alpine:3.9

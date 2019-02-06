@@ -16,13 +16,14 @@ import (
 	"time"
 
 	"github.com/mslocrian/dragnet/internal/config"
-	//"github.com/mslocrian/dragnet/internal/discovery"
 	"github.com/mslocrian/dragnet/internal/environment"
 	"github.com/mslocrian/dragnet/internal/probers"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/discovery/marathon"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -31,18 +32,13 @@ const (
 	letterIdxBits = 6                    // 6 bits to represent a letter index
 	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
 	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+    sleepTime = 60  // Hard coded time to sleep between auto discovery jobs
 )
 
 var (
 	sc = &config.SafeConfig{
 		C: &config.Config{},
 	}
-
-    /*
-    AutoTargets = map[string]discovery.AutoTargetFn{
-        "dcos": discovery.AutoTargetDCOS
-    }
-    */
 
 	probeSuccessGauge  *prometheus.GaugeVec
 	probeDurationGauge *prometheus.GaugeVec
@@ -67,6 +63,46 @@ func randomString(n int) string {
 	}
 
 	return string(b)
+}
+
+func handleDynamicDiscoverers(sc *config.SafeConfig) {
+	cfg := sc.C
+	for k, _ := range cfg.DiscoveryManagers {
+		go func(manager string, sc *config.SafeConfig) {
+			for {
+				ctx := context.Background()
+				ts := make(chan []*targetgroup.Group)
+				d := cfg.DiscoveryManagers[manager]
+				switch manager {
+				case "dcos":
+                    log.Debugf("Autodiscovery: starting marathon dragnet app discovery.")
+					discovery := d.(*marathon.Discovery)
+					go discovery.Run(ctx, ts)
+					targetGroups := <-ts
+					newTargets := make(map[string]bool)
+					atConfig := sc.C.AutoTargets[manager]
+					for _, target := range targetGroups {
+						if atConfig.ServiceName == target.Source {
+							for _, label := range target.Targets {
+								newTargets[string(label["__address__"])] = true
+							}
+						}
+					}
+
+					sc.UpdateTargets(newTargets)
+                    log.Debugf("Autodiscovery: Completed marathon dragnet app discovery.")
+				default:
+					return
+				}
+                log.Debugf("Autodiscovery: sleeping %s second", sleepTime)
+                time.Sleep(sleepTime * time.Second)
+			}
+		}(k, sc)
+	}
+}
+
+func stopDynamicDisoverers(sc *config.SafeConfig) error {
+	return nil
 }
 
 func generateHandler(w http.ResponseWriter, r *http.Request) {
@@ -193,7 +229,7 @@ func main() {
 		configLogLevel = flag.String("log.level", "info", "The dragnet log level. Log levels are: debug, info, warn, error, fatal, panic.")
 		configFile     = flag.String("config.file", "/etc/dragnet/dragnet.yml", "The dragnet configuration file.")
 		listenAddress  = flag.String("web.listen-address", "0.0.0.0", "The address to listen on for HTTP requests.")
-		listenPort  = flag.String("web.listen-port", "9600", "The address to listen on for HTTP requests.")
+		listenPort     = flag.String("web.listen-port", "9600", "The address to listen on for HTTP requests.")
 		sourceHost     = flag.String("config.source-host", "", "The address to set source host in metrics (default: $SAUSAGE_HOST)")
 		versionFlag    = flag.Bool("version", false, "Print version information.")
 	)
@@ -264,7 +300,9 @@ func main() {
 			zeroMetricsRegistry(registry)
 			fmt.Fprintf(w, "Configuration reloaded!\n")
 		})
+
 	http.Handle("/metrics", promhttp.Handler())
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<html>
@@ -286,10 +324,12 @@ func main() {
 		generateHandler(w, r)
 	})
 
-    address := environment.GetVar(*listenAddress)
-    port := environment.GetVar(*listenPort)
-    addressPort := fmt.Sprintf("%v:%v", address, port)
-    log.Infof("dragnet listening on address %v", addressPort)
+	handleDynamicDiscoverers(sc)
+
+	address := environment.GetVar(*listenAddress)
+	port := environment.GetVar(*listenPort)
+	addressPort := fmt.Sprintf("%v:%v", address, port)
+	log.Infof("dragnet listening on address %v", addressPort)
 	if err := http.ListenAndServe(addressPort, nil); err != nil {
 		log.Fatalf("Error starting HTTP server! err=%v", err)
 	}

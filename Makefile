@@ -5,7 +5,7 @@ pkgs=$(shell $(GO) list ./... | egrep -v ("vendor)")
 
 export DOCKERHUB_REPO=dragnet
 export DOCKERHUB_USER=mslocrian
-export SAUSAGE_VERSION=0.0.5
+export SAUSAGE_VERSION=0.0.11
 export VERSION=v$(SAUSAGE_VERSION)
 
 build:
@@ -29,4 +29,5 @@ push:
 	docker push $(DOCKERHUB_USER)/$(DOCKERHUB_REPO):$(SAUSAGE_VERSION)
 
 run:
+	@rm -rf vendor/github.com/prometheus/prometheus/vendor
 	$(GO) run -ldflags "-X main.version=$(VERSION)" cmd/dragnet/main.go -log.level debug -config.file ./dragnet.yml

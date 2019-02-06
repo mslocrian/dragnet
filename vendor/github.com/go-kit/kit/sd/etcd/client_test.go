@@ -5,7 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
-	"context"
+
+	"golang.org/x/net/context"
 
 	etcd "go.etcd.io/etcd/client"
 )

@@ -16,5 +16,13 @@ import:
 - package: github.com/beorn7/perks
   subpackages:
   - quantile
+- package: github.com/prometheus/prometheus
+  version: ^2.7.1
+- package: github.com/pkg/errors
+  version: ^0.8.1
+- package: github.com/go-kit/kit
+  version: ^0.8.0
+  subpackages:
+  - log
 testImport:
 - package: gopkg.in/check.v1

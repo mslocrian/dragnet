@@ -11,13 +11,13 @@ import (
 )
 
 type logrusLogger struct {
-	logrus.FieldLogger
+	*logrus.Logger
 }
 
 var errMissingValue = errors.New("(MISSING)")
 
 // NewLogrusLogger returns a go-kit log.Logger that sends log events to a Logrus logger.
-func NewLogrusLogger(logger logrus.FieldLogger) log.Logger {
+func NewLogrusLogger(logger *logrus.Logger) log.Logger {
 	return &logrusLogger{logger}
 }
 

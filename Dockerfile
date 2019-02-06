@@ -7,10 +7,12 @@ RUN apk update && apk add alpine-sdk autoconf automake bash python py-pip && \
 WORKDIR /go/src/github.com/mslocrian/dragnet
 
 COPY . .
+RUN rm -rf vendor/github.com/prometheus/prometheus/vendor
 RUN make build-local
 
 FROM alpine:3.9
 WORKDIR /usr/local
+RUN mkdir /etc/dragnet
 COPY --from=0 /go/src/github.com/mslocrian/dragnet/dragnet .
-COPY --from=0 /go/src/github.com/mslocrian/dragnet/dragnet.yml /etc/dragnet.yml
+COPY --from=0 /go/src/github.com/mslocrian/dragnet/dragnet.yml /etc/dragnet/dragnet.yml
 ENTRYPOINT ["/usr/local/dragnet"]

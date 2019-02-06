@@ -94,7 +94,7 @@ func handleDynamicDiscoverers(sc *config.SafeConfig) {
 				default:
 					return
 				}
-                log.Debugf("Autodiscovery: sleeping %v second", sleepTime)
+                log.Debugf("Autodiscovery: sleeping for %v seconds", sleepTime)
                 time.Sleep(sleepTime * time.Second)
 			}
 		}(k, sc)

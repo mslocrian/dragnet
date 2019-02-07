@@ -118,7 +118,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 	if c.SourceHost != "" {
 		source = environment.GetVar(c.SourceHost)
 	} else {
-		source = environment.GetVar("env:SAUSAGE_HOST")
+		source = environment.GetVar("env:DRAGNET_HOST")
 	}
 
 	maxGoRoutines := 30
@@ -190,7 +190,7 @@ func main() {
 		configFile     = flag.String("config.file", "/etc/dragnet/dragnet.yml", "The dragnet configuration file.")
 		listenAddress  = flag.String("web.listen-address", "0.0.0.0", "The address to listen on for HTTP requests.")
 		listenPort     = flag.String("web.listen-port", "9600", "The address to listen on for HTTP requests.")
-		sourceHost     = flag.String("config.source-host", "", "The address to set source host in metrics (default: $SAUSAGE_HOST)")
+		sourceHost     = flag.String("config.source-host", "", "The address to set source host in metrics (default: $DRAGNET_HOST)")
 		versionFlag    = flag.Bool("version", false, "Print version information.")
 	)
 	flag.Parse()
@@ -269,7 +269,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<html>
-    <head><title>Sausage - Cluster Mesh Latency Thingy</title></head>
+    <head><title>Dragnet - Cluster Mesh Latency Thingy</title></head>
     <body>
         Do work!
     </body>

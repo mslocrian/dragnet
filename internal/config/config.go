@@ -198,8 +198,9 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: marathon task fetch timeout. continuing...")
+                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+                    log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
 							continue
-
 						}
 						newTargets := make(map[string]bool)
 						var listTargets []string
@@ -224,6 +225,9 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 					if stopDiscoverer() {
 						break
 					}
+
+                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+                    refreshInterval.String()
 					time.Sleep(taskRefresh * time.Second)
 				}
 				return nil

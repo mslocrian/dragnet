@@ -7,22 +7,23 @@ modules:
       ip_protocol_fallback: true
       preferred_ip_protocol: "ipv4"
 
-include:
-  - targets.yml
-
-autotargets:
-  dcos:
-    service_name: "/dragnet"
-    servers:
-      - http://master.mesos:8080
-    refresh_interval: 60s
-    basic_auth:
-      username: env:AUTH_USER
-      password: env:AUTH_PASSWORD
+#autotargets:
+#  dcos:
+#    service_name: "/dragnet"
+#    servers:
+#      - http://master.mesos:8080
+#    refresh_interval: 60s
+#    basic_auth:
+#      username: env:AUTH_USER
+#      password: env:AUTH_PASSWORD
 
 # Can create static lists here, or include  separately
-targets:
-  - 172.17.0.2:9600
-  - 172.17.0.3:9600
-  - 172.17.0.4:9600
-  - 172.17.0.5:9600
+#targets:
+#  - 172.17.0.2:9600
+#  - 172.17.0.3:9600
+#  - 172.17.0.4:9600
+#  - 172.17.0.5:9600
+
+# include targets here
+#include:
+#  - targets.yml

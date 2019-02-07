@@ -81,8 +81,17 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 		if strings.ToLower(key) == "dcos" {
 			atConfig := c.AutoTargets[key]
 
+			// stegen - find a better way to override the refresh
+			// interval. we want to tune it way down, since we're
+			// overriding a sleep elsewhere.
+			/*
+				sdConfig := marathon.SDConfig{Servers: atConfig.Servers,
+					RefreshInterval:  atConfig.RefreshInterval,
+					HTTPClientConfig: atConfig.HTTPClientConfig}
+			*/
+			duration, _ := model.ParseDuration("1s")
 			sdConfig := marathon.SDConfig{Servers: atConfig.Servers,
-				RefreshInterval:  atConfig.RefreshInterval,
+				RefreshInterval:  duration,
 				HTTPClientConfig: atConfig.HTTPClientConfig}
 			promlogLevel := &promlog.AllowedLevel{}
 			promlogLevel.Set("debug")
@@ -185,10 +194,13 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						case <-ts:
 							targetGroups = <-ts
 							cancel()
+							log.Debugf("Autodiscovery: marathon task fetch complete.")
 							break
 						case <-time.After(taskTimeout * time.Second):
+							log.Debugf("Autodiscovery: marathon task fetch timeout. continuing...")
+                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+                    log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
 							continue
-
 						}
 						newTargets := make(map[string]bool)
 						var listTargets []string
@@ -213,6 +225,9 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 					if stopDiscoverer() {
 						break
 					}
+
+                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+                    refreshInterval.String()
 					time.Sleep(taskRefresh * time.Second)
 				}
 				return nil

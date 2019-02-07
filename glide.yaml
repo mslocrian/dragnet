@@ -24,5 +24,6 @@ import:
   version: ^0.8.0
   subpackages:
   - log
+- package: github.com/matryer/runner
 testImport:
 - package: gopkg.in/check.v1

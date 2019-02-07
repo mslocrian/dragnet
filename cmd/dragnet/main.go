@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	yaml "gopkg.in/yaml.v2"
+
 	"github.com/mslocrian/dragnet/internal/config"
 	"github.com/mslocrian/dragnet/internal/environment"
 	"github.com/mslocrian/dragnet/internal/probers"
@@ -22,8 +24,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
-	"github.com/prometheus/prometheus/discovery/marathon"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,7 +32,7 @@ const (
 	letterIdxBits = 6                    // 6 bits to represent a letter index
 	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
 	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
-    sleepTime = 60  // Hard coded time to sleep between auto discovery jobs
+	sleepTime     = 60                   // Hard coded time to sleep between auto discovery jobs
 )
 
 var (
@@ -63,46 +63,6 @@ func randomString(n int) string {
 	}
 
 	return string(b)
-}
-
-func handleDynamicDiscoverers(sc *config.SafeConfig) {
-	cfg := sc.C
-	for k, _ := range cfg.DiscoveryManagers {
-		go func(manager string, sc *config.SafeConfig) {
-			for {
-				ctx := context.Background()
-				ts := make(chan []*targetgroup.Group)
-				d := cfg.DiscoveryManagers[manager]
-				switch manager {
-				case "dcos":
-                    log.Debugf("Autodiscovery: starting marathon dragnet app discovery.")
-					discovery := d.(*marathon.Discovery)
-					go discovery.Run(ctx, ts)
-					targetGroups := <-ts
-					newTargets := make(map[string]bool)
-					atConfig := sc.C.AutoTargets[manager]
-					for _, target := range targetGroups {
-						if atConfig.ServiceName == target.Source {
-							for _, label := range target.Targets {
-								newTargets[string(label["__address__"])] = true
-							}
-						}
-					}
-
-					sc.UpdateTargets(newTargets)
-                    log.Debugf("Autodiscovery: Completed marathon dragnet app discovery.")
-				default:
-					return
-				}
-                log.Debugf("Autodiscovery: sleeping for %v seconds.", sleepTime)
-                time.Sleep(sleepTime * time.Second)
-			}
-		}(k, sc)
-	}
-}
-
-func stopDynamicDisoverers(sc *config.SafeConfig) error {
-	return nil
 }
 
 func generateHandler(w http.ResponseWriter, r *http.Request) {
@@ -271,6 +231,8 @@ func main() {
 					continue
 				}
 				zeroMetricsRegistry(registry)
+				sc.StopAutoDiscoverers()
+				sc.StartAutoDiscoverers()
 				log.Info("Reloaded config file.")
 			case rc := <-reloadCh:
 				if err := sc.ReloadConfig(*configFile); err != nil {
@@ -278,6 +240,8 @@ func main() {
 					rc <- err
 				} else {
 					zeroMetricsRegistry(registry)
+					sc.StopAutoDiscoverers()
+					sc.StartAutoDiscoverers()
 					log.Info("Reloaded config file.")
 					rc <- nil
 				}
@@ -297,7 +261,6 @@ func main() {
 			if err := <-rc; err != nil {
 				http.Error(w, fmt.Sprintf("failed to reload config: %s", err), http.StatusInternalServerError)
 			}
-			zeroMetricsRegistry(registry)
 			fmt.Fprintf(w, "Configuration reloaded!\n")
 		})
 
@@ -324,7 +287,19 @@ func main() {
 		generateHandler(w, r)
 	})
 
-	handleDynamicDiscoverers(sc)
+	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		sc.RLock()
+		c, err := yaml.Marshal(sc.C)
+		sc.RUnlock()
+		if err != nil {
+			log.Warnf("Error marshaling configuration. err=%v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(c)
+	})
+
+	sc.StartAutoDiscoverers()
 
 	address := environment.GetVar(*listenAddress)
 	port := environment.GetVar(*listenPort)

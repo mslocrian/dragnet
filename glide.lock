@@ -1,5 +1,5 @@
-hash: ea92b899f2ee8e02a552d7dccfe80fb51cbef9bd7fbc1c559dec28bbb8eb645d
-updated: 2019-02-06T10:35:13.791846404-08:00
+hash: d7c0709206162e6d74001ad500565f42621b7c9dc1693d2ac935cf9b73d2b507
+updated: 2019-02-06T14:02:07.851099361-08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
@@ -20,6 +20,8 @@ imports:
   version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/kr/logfmt
   version: b84e30acd515aadc4b783ad4ff83aff3299bdfe0
+- name: github.com/matryer/runner
+  version: cf38584beeb2f574760aacdf7b1f33795c703cbf
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c182affec369e30f25d3eb8cd8a478dee585ae7d
   subpackages:

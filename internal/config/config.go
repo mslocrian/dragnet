@@ -1,12 +1,14 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/matryer/runner"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 
@@ -14,21 +16,33 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/prometheus/discovery/marathon"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
+)
+
+const (
+	taskRefresh = 45
+	taskTimeout = 60
 )
 
 type Config struct {
-	AutoTargets       map[string]AutoTarget `yaml:"autotargets"`
-	DiscoveryManagers map[string]interface{}
-	Includes          []string          `yaml:"include"`
-	Modules           map[string]Module `yaml:"modules"`
-	Targets           []string          `yaml:"targets"`
-	SourceHost        string            `yaml:"source_host"`
-	targets           map[string]bool
+	AutoTargets       map[string]AutoTarget  `yaml:"autotargets"`
+	DiscoveryManagers map[string]interface{} `yaml:"-"`
+	Includes          []string               `yaml:"include"`
+	Modules           map[string]Module      `yaml:"modules"`
+	Targets           []string               `yaml:"targets"`
+	SourceHost        string                 `yaml:"source_host"`
+	targets           map[string]bool        `yaml:"-"`
 }
 
 type SafeConfig struct {
 	sync.RWMutex
-	C *Config
+	C     *Config
+	tasks []Task
+}
+
+type Task struct {
+	Name   string
+	Runner *runner.Task
 }
 
 func (s *SafeConfig) ReloadConfig(cfg string) error {
@@ -57,6 +71,7 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 			continue
 		}
 		for _, target := range includeC.Targets {
+			c.Targets = append(c.Targets, target)
 			targets[target] = true
 		}
 	}
@@ -78,26 +93,10 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 			logger := promlog.New(promlogConfig)
 			discovery, err := marathon.NewDiscovery(sdConfig, logger)
 			if err != nil {
-				// stegen - perhaps do something else here?
+				log.Errorf("Could not start discovery process for %v method. skipping...", key)
 				continue
 			}
 			c.DiscoveryManagers[key] = discovery
-			/*
-			   ctx := context.Background()
-			   ts := make(chan []*targetgroup.Group)
-			   go discovery.Run(ctx, ts)
-			   newTargets := <-ts
-			   for _, target := range newTargets {
-			       // do the service names match? that's what we are interested in!
-			       if atConfig.ServiceName == target.Source {
-			           for _, label := range target.Targets {
-			               t := string(label["__address__"])
-			               log.Debugf("t=%v", t)
-			               targets[t] = true
-			           }
-			       }
-			   }
-			*/
 		} else {
 			log.Warnf("Unknown discovery method %v. skipping...", key)
 		}
@@ -125,11 +124,129 @@ func (c *Config) SetTargets(targets map[string]bool) {
 func (s *SafeConfig) UpdateTargets(t map[string]bool) {
 	s.Lock()
 	targets := s.C.GetTargets()
-	for k, _ := range t {
+	for k := range t {
 		targets[k] = true
 	}
 	s.C.SetTargets(targets)
 	s.Unlock()
+}
+
+func (s *SafeConfig) DeleteTargets(t map[string]bool) {
+	s.Lock()
+	targets := s.C.GetTargets()
+	for k := range t {
+		delete(targets, k)
+	}
+	s.C.SetTargets(targets)
+	s.Unlock()
+}
+
+func (s *SafeConfig) StartAutoDiscoverers() {
+	log.Debugf("SafeConfig::StartAutoDiscoverers(): starting autodiscovery processes.")
+	for manager := range s.C.DiscoveryManagers {
+		switch manager {
+		case "dcos":
+			log.Debugf("SafeConfig::StartAutoDiscoverers(): starting %s discovery.", manager)
+			task := runner.Go(func(stopDiscoverer runner.S) error {
+				var (
+					ctx          context.Context
+					cancel       context.CancelFunc
+					targetGroups []*targetgroup.Group
+					ts           chan []*targetgroup.Group
+				)
+				d := s.C.DiscoveryManagers[manager]
+
+				// work to do at the end after break.
+				defer func() {
+					cancel()
+					mapTargets := make(map[string]bool)
+					mgr := s.C.AutoTargets[manager]
+					for _, v := range mgr.Targets {
+						mapTargets[v] = true
+					}
+					s.DeleteTargets(mapTargets)
+					mgr.Targets = []string{}
+					s.C.AutoTargets[manager] = mgr
+				}()
+
+				for {
+					if stopDiscoverer() {
+						break
+					}
+					switch manager {
+					case "dcos":
+						log.Debugf("Autodiscovery: starting marathon dragnet app discovery")
+						ctx = context.Background()
+						ctx, cancel = context.WithCancel(ctx)
+						ts = make(chan []*targetgroup.Group)
+						discovery := d.(*marathon.Discovery)
+						go discovery.Run(ctx, ts)
+						select {
+						case <-ts:
+							targetGroups = <-ts
+							cancel()
+							break
+						case <-time.After(taskTimeout * time.Second):
+							continue
+
+						}
+						newTargets := make(map[string]bool)
+						var listTargets []string
+						atConfig := s.C.AutoTargets[manager]
+						for _, target := range targetGroups {
+							if atConfig.ServiceName == target.Source {
+								for _, label := range target.Targets {
+									newTargets[string(label["__address__"])] = true
+									listTargets = append(listTargets, string(label["__address__"]))
+								}
+							}
+						}
+						// stegen - will do something better here someday, maybe.
+						mgr := s.C.AutoTargets[manager]
+						mgr.Targets = listTargets
+						s.C.AutoTargets[manager] = mgr
+						s.UpdateTargets(newTargets)
+					default:
+						// this shouldn't get hit
+						return nil
+					}
+					if stopDiscoverer() {
+						break
+					}
+					time.Sleep(taskRefresh * time.Second)
+				}
+				return nil
+			})
+			s.tasks = append(s.tasks, Task{Name: manager, Runner: task})
+		default:
+			// this is not a valid manager at the time
+			return
+		}
+	}
+	log.Debugf("SafeConfig::StartAutoDiscoverers(): started autodiscovery processes.")
+}
+
+func (s *SafeConfig) StopAutoDiscoverers() error {
+	log.Debugf("SafeConfig::StopAutoDiscoverers(): stopping autodiscovery processes.")
+	for _, t := range s.tasks {
+		task := t.Runner
+		log.Debugf("SafeConfig::StopAutoDiscoverers(): stopping %v discovery.", t.Name)
+		log.Debugf("SafeConfig::StopAutoDiscoverers(): task=%#v", task)
+		task.Stop()
+		log.Debugf("SafeConfig::StopAutoDiscoverers(): task=%#v", task)
+		select {
+		case <-task.StopChan():
+			log.Debugf("SafeConfig::StopAutoDiscoverers(): stopped %v discovery.", t.Name)
+		case <-time.After(taskTimeout * time.Second):
+			log.Errorf("SafeConfig::StopAutoDiscoverers(): failed to stop %v discovery in time.", t.Name)
+		}
+		if task.Err() != nil {
+			log.Errorf("SafeConfig::StopAutoDiscoverers(): failed to stop %v discovery!", t.Name)
+		}
+
+	}
+	log.Debugf("SafeConfig::StopAutoDiscoverers(): stopped autodiscovery processes.")
+	return nil
 }
 
 type AutoTarget struct {
@@ -138,6 +255,7 @@ type AutoTarget struct {
 	RefreshInterval  model.Duration          `yaml:"refresh_interval,omitempty"`
 	AuthToken        config.Secret           `yaml:"auth_token"`
 	HTTPClientConfig config.HTTPClientConfig `yaml:",inline"`
+	Targets          []string                `yaml:"targets"`
 }
 
 type Module struct {

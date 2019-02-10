@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/prometheus/discovery/kubernetes"
 	"github.com/prometheus/prometheus/discovery/marathon"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 )
@@ -78,7 +79,7 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 	// all this stuff from here -->
 	c.DiscoveryManagers = make(map[string]interface{})
 	for key := range c.AutoTargets {
-		if strings.ToLower(key) == "dcos" {
+		if (strings.ToLower(key) == "dcos") || (strings.ToLower(key) == "mesosphere") {
 			atConfig := c.AutoTargets[key]
 
 			// stegen - find a better way to override the refresh
@@ -106,6 +107,26 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 				continue
 			}
 			c.DiscoveryManagers[key] = discovery
+		} else if strings.ToLower(key) == "kubernetes" {
+			log.Debugf("Found kubernetes provider!")
+			atConfig := c.AutoTargets[key]
+            sdConfig := &kubernetes.SDConfig{Role: atConfig.Role,
+                BearerToken: atConfig.BearerToken,
+                BearerTokenFile: atConfig.BearerTokenFile,
+                TLSConfig: atConfig.TLSConfig}
+			promlogLevel := &promlog.AllowedLevel{}
+			promlogLevel.Set("debug")
+			promlogFormat := &promlog.AllowedFormat{}
+			promlogFormat.Set("logfmt")
+			promlogConfig := &promlog.Config{Level: promlogLevel,
+				Format: promlogFormat}
+			logger := promlog.New(promlogConfig)
+            discovery, err := kubernetes.New(logger, sdConfig)
+            if err != nil {
+				log.Errorf("Could not start discovery process for %v method. skipping...", key)
+				continue
+            }
+            c.DiscoveryManagers[key] = discovery
 		} else {
 			log.Warnf("Unknown discovery method %v. skipping...", key)
 		}
@@ -154,7 +175,7 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 	log.Debugf("SafeConfig::StartAutoDiscoverers(): starting autodiscovery processes.")
 	for manager := range s.C.DiscoveryManagers {
 		switch manager {
-		case "dcos":
+		case "dcos", "mesosphere", "kubernetes":
 			log.Debugf("SafeConfig::StartAutoDiscoverers(): starting %s discovery.", manager)
 			task := runner.Go(func(stopDiscoverer runner.S) error {
 				var (
@@ -183,7 +204,7 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						break
 					}
 					switch manager {
-					case "dcos":
+					case "dcos", "marathon":
 						log.Debugf("Autodiscovery: starting marathon dragnet app discovery")
 						ctx = context.Background()
 						ctx, cancel = context.WithCancel(ctx)
@@ -198,8 +219,8 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: marathon task fetch timeout. continuing...")
-                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
-                    log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
+							refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+							log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
 							continue
 						}
 						newTargets := make(map[string]bool)
@@ -218,6 +239,25 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						mgr.Targets = listTargets
 						s.C.AutoTargets[manager] = mgr
 						s.UpdateTargets(newTargets)
+					case "kubernetes":
+						log.Debugf("WE HIT SOMETHING KUBERNETES!")
+						ctx = context.Background()
+						ctx, cancel = context.WithCancel(ctx)
+						ts = make(chan []*targetgroup.Group)
+						discovery := d.(*kubernetes.Discovery)
+						go discovery.Run(ctx, ts)
+						select {
+						case <-ts:
+							targetGroups = <-ts
+							cancel()
+							log.Debugf("Autodiscovery: kubernetes task fetch complete.")
+							break
+						case <-time.After(taskTimeout * time.Second):
+							log.Debugf("Autodiscovery: kubernetes task fetch timeout. continuing...")
+							refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+							log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
+							continue
+						}
 					default:
 						// this shouldn't get hit
 						return nil
@@ -226,8 +266,8 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						break
 					}
 
-                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
-                    refreshInterval.String()
+					refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+					refreshInterval.String()
 					time.Sleep(taskRefresh * time.Second)
 				}
 				return nil
@@ -265,12 +305,18 @@ func (s *SafeConfig) StopAutoDiscoverers() error {
 }
 
 type AutoTarget struct {
-	Servers          []string                `yaml:"servers,omitempty"`
-	ServiceName      string                  `yaml:"service_name"`
-	RefreshInterval  model.Duration          `yaml:"refresh_interval,omitempty"`
-	AuthToken        config.Secret           `yaml:"auth_token"`
-	HTTPClientConfig config.HTTPClientConfig `yaml:",inline"`
-	Targets          []string                `yaml:"targets"`
+	Servers            []string                      `yaml:"servers,omitempty"`
+	ServiceName        string                        `yaml:"service_name,omitempty"`
+	RefreshInterval    model.Duration                `yaml:"refresh_interval,omitempty"`
+	AuthToken          config.Secret                 `yaml:"auth_token,omitempty"`
+	HTTPClientConfig   config.HTTPClientConfig       `yaml:",inline"`
+	Targets            []string                      `yaml:"targets"`
+	APIServer          config.URL                    `yaml:"api_server,omitempty"`
+	Role               kubernetes.Role               `yaml:"role,omitempty"`
+	BearerToken        config.Secret                 `yaml:"bearer_token,omitempty"`
+	BearerTokenFile    string                        `yaml:"bearer_token_file,omitempty"`
+	TLSConfig          config.TLSConfig              `yaml:"tls_config,omitempty"`
+	NamespaceDiscovery kubernetes.NamespaceDiscovery `yaml:"namespaces,omitempty"`
 }
 
 type Module struct {

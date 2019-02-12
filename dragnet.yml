@@ -27,3 +27,23 @@ modules:
 # include targets here
 #include:
 #  - targets.yml
+autotargets:
+  kubernetes:
+    service_name: "dragnet"
+    role: endpoints
+    namespaces:
+      names:
+      - dragnet
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      server_name: kubernetes
+      insecure_skip_verify: false
+  dcos:
+    service_name: "/dragnet"
+    servers:
+      - http://master.mesos:8080
+    refresh_interval: 60s
+    basic_auth:
+      username: dcos-ethos-services
+      password: 4e036f5da2f716c0c5aa51a0b85c2bfd1a672717

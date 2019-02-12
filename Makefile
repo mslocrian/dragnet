@@ -5,7 +5,7 @@ pkgs=$(shell $(GO) list ./... | egrep -v ("vendor)")
 
 export DOCKERHUB_REPO=dragnet
 export DOCKERHUB_USER=mslocrian
-export DRAGNET_VERSION=0.0.16
+export DRAGNET_VERSION=0.0.20
 export VERSION=v$(DRAGNET_VERSION)
 
 build:

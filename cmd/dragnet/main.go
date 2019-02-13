@@ -87,8 +87,7 @@ func generateHandler(w http.ResponseWriter, r *http.Request) {
 
 func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, registry *prometheus.Registry) {
 	var (
-		wg     sync.WaitGroup
-		source string
+		wg sync.WaitGroup
 	)
 	wg = sync.WaitGroup{}
 	targets := c.GetTargets()
@@ -115,11 +114,6 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 
 	prober := prober.ProbeHTTP
 	module := c.Modules["http_2xx"]
-	if c.SourceHost != "" {
-		source = environment.GetVar(c.SourceHost)
-	} else {
-		source = environment.GetVar("env:DRAGNET_HOST")
-	}
 
 	maxGoRoutines := 30
 	guard := make(chan struct{}, maxGoRoutines)
@@ -128,9 +122,9 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 		wg.Add(1)
 		go func(t string) {
 			start := time.Now()
-			success := prober(ctx, source, target, module, registry)
+			success := prober(ctx, c.SourceHost, target, module, registry)
 			duration := time.Since(start).Seconds()
-			probeDurationGauge.With(prometheus.Labels{"target": target}).Set(duration)
+			probeDurationGauge.With(prometheus.Labels{"target": target, "source": c.SourceHost}).Set(duration)
 			if success {
 				probeSuccessGauge.With(prometheus.Labels{"target": target}).Set(1)
 			}
@@ -180,7 +174,7 @@ func init() {
 	probeDurationGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "dragnet_probe_duration_seconds",
 		Help: "Returns how long the probe took to complete in seconds",
-	}, []string{"target"})
+	}, []string{"source", "target"})
 }
 
 func main() {
@@ -288,8 +282,21 @@ func main() {
 	})
 
 	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		type ConfigConversion struct {
+			AutoTargets map[string]*config.Target `yaml:"autotargets,omitempty"`
+			Includes    []string                  `yaml:"include,omitempty"`
+			Modules     map[string]config.Module  `yaml:"modules,omitempty"`
+			SourceHost  string                    `yaml:"source_host,omitempty"`
+			Targets     []string                  `yaml:"targets,omitempty"`
+		}
+		var cfg ConfigConversion
 		sc.RLock()
-		c, err := yaml.Marshal(sc.C)
+		cfg.AutoTargets = sc.C.GetAutoTargets()
+		cfg.Includes = sc.C.Includes
+		cfg.Modules = sc.C.Modules
+		cfg.SourceHost = sc.C.SourceHost
+		cfg.Targets = sc.C.Targets
+		c, err := yaml.Marshal(cfg)
 		sc.RUnlock()
 		if err != nil {
 			log.Warnf("Error marshaling configuration. err=%v", err)

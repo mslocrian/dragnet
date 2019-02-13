@@ -25,5 +25,6 @@ import:
   subpackages:
   - log
 - package: github.com/matryer/runner
+- package: k8s.io/api
 testImport:
 - package: gopkg.in/check.v1

@@ -8,13 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mslocrian/dragnet/internal/environment"
+
 	"github.com/matryer/runner"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/prometheus/common/config"
-	"github.com/prometheus/common/model"
+	//"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/prometheus/discovery/kubernetes"
 	"github.com/prometheus/prometheus/discovery/marathon"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 )
@@ -25,12 +28,13 @@ const (
 )
 
 type Config struct {
-	AutoTargets       map[string]AutoTarget  `yaml:"autotargets"`
+	AutoTargets       map[string]interface{} `yaml:"autotargets"`
 	DiscoveryManagers map[string]interface{} `yaml:"-"`
-	Includes          []string               `yaml:"include"`
+	Includes          []string               `yaml:"include,omitempty"`
 	Modules           map[string]Module      `yaml:"modules"`
-	Targets           []string               `yaml:"targets"`
-	SourceHost        string                 `yaml:"source_host"`
+	Targets           []string               `yaml:"targets,omitempty"`
+	SourceHost        string                 `yaml:"source_host,omitempty"`
+	autoTargetsConfig map[string]*Target     `yaml:"-"`
 	targets           map[string]bool        `yaml:"-"`
 }
 
@@ -75,44 +79,58 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 			targets[target] = true
 		}
 	}
-	// all this stuff from here -->
 	c.DiscoveryManagers = make(map[string]interface{})
+	// all this stuff from here -->
+	promlogLevel := &promlog.AllowedLevel{}
+	promlogLevel.Set("debug")
+	promlogFormat := &promlog.AllowedFormat{}
+	promlogFormat.Set("logfmt")
+	promlogConfig := &promlog.Config{Level: promlogLevel,
+		Format: promlogFormat}
+	logger := promlog.New(promlogConfig)
+	// <-- to here needs to be rethought
 	for key := range c.AutoTargets {
-		if strings.ToLower(key) == "dcos" {
-			atConfig := c.AutoTargets[key]
-
-			// stegen - find a better way to override the refresh
-			// interval. we want to tune it way down, since we're
-			// overriding a sleep elsewhere.
-			/*
-				sdConfig := marathon.SDConfig{Servers: atConfig.Servers,
-					RefreshInterval:  atConfig.RefreshInterval,
-					HTTPClientConfig: atConfig.HTTPClientConfig}
-			*/
-			duration, _ := model.ParseDuration("1s")
-			sdConfig := marathon.SDConfig{Servers: atConfig.Servers,
-				RefreshInterval:  duration,
-				HTTPClientConfig: atConfig.HTTPClientConfig}
-			promlogLevel := &promlog.AllowedLevel{}
-			promlogLevel.Set("debug")
-			promlogFormat := &promlog.AllowedFormat{}
-			promlogFormat.Set("logfmt")
-			promlogConfig := &promlog.Config{Level: promlogLevel,
-				Format: promlogFormat}
-			logger := promlog.New(promlogConfig)
-			discovery, err := marathon.NewDiscovery(sdConfig, logger)
+		switch strings.ToLower(key) {
+		case "dcos", "mesosphere":
+			sdConfig, err := getMarathonDiscoveryConfig(c.AutoTargets[key])
 			if err != nil {
-				log.Errorf("Could not start discovery process for %v method. skipping...", key)
-				continue
+				log.Errorf("Could not parse discovery config for %s. err=%v. skipping...", key, err)
+				break
+			}
+			c.SetAutoTargetConfig(key, sdConfig)
+			discovery, err := marathon.NewDiscovery(sdConfig.GetConfig().(marathon.SDConfig), logger)
+			if err != nil {
+				log.Errorf("Could not start discovery process for %v method. err=%v. skipping...", key, err)
+				break
 			}
 			c.DiscoveryManagers[key] = discovery
-		} else {
+		case "kubernetes":
+			sdConfig, err := getKubernetesDiscoveryConfig(c.AutoTargets[key])
+			if err != nil {
+				log.Errorf("Could not parse discovery config for %s. err=%v. skipping...", key, err)
+				break
+			}
+			c.SetAutoTargetConfig(key, sdConfig)
+			kConfig := sdConfig.GetConfig().(kubernetes.SDConfig)
+			discovery, err := kubernetes.New(logger, &kConfig)
+			//discovery, err := kubernetes.NewPod(logger, &kConfig)
+			if err != nil {
+				log.Errorf("Could not start discovery process for %v method. err=%v. skipping...", key, err)
+				break
+			}
+			c.DiscoveryManagers[key] = discovery
+		default:
 			log.Warnf("Unknown discovery method %v. skipping...", key)
 		}
-		// to here, needs to be re-thought out.
 	}
 	for _, target := range c.Targets {
 		targets[target] = true
+	}
+
+	if s.C.SourceHost != "" {
+		c.SourceHost = environment.GetVar(s.C.SourceHost)
+	} else {
+		c.SourceHost = environment.GetVar("env:DRAGNET_HOST")
 	}
 
 	s.Lock()
@@ -123,11 +141,44 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 }
 
 func (c *Config) GetTargets() map[string]bool {
-	return c.targets
+	var resTargets map[string]bool
+	resTargets = make(map[string]bool)
+	for key := range c.AutoTargets {
+		mgr := *c.GetAutoTargetConfig(key)
+		for k, v := range mgr.GetTargets() {
+			resTargets[k] = v
+		}
+	}
+
+	// loop over static config targets
+	for k, v := range c.targets {
+		resTargets[k] = v
+	}
+	return resTargets
 }
 
 func (c *Config) SetTargets(targets map[string]bool) {
 	c.targets = targets
+}
+
+func (c *Config) GetAutoTargetConfig(key string) *Target {
+	if target, ok := c.autoTargetsConfig[key]; ok {
+		return target
+	} else {
+		var res Target
+		return &res
+	}
+}
+
+func (c *Config) GetAutoTargets() map[string]*Target {
+	return c.autoTargetsConfig
+}
+
+func (c *Config) SetAutoTargetConfig(key string, target Target) {
+	if c.autoTargetsConfig == nil {
+		c.autoTargetsConfig = make(map[string]*Target)
+	}
+	c.autoTargetsConfig[key] = &target
 }
 
 func (s *SafeConfig) UpdateTargets(t map[string]bool) {
@@ -154,7 +205,7 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 	log.Debugf("SafeConfig::StartAutoDiscoverers(): starting autodiscovery processes.")
 	for manager := range s.C.DiscoveryManagers {
 		switch manager {
-		case "dcos":
+		case "dcos", "mesosphere", "kubernetes":
 			log.Debugf("SafeConfig::StartAutoDiscoverers(): starting %s discovery.", manager)
 			task := runner.Go(func(stopDiscoverer runner.S) error {
 				var (
@@ -168,14 +219,16 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 				// work to do at the end after break.
 				defer func() {
 					cancel()
-					mapTargets := make(map[string]bool)
-					mgr := s.C.AutoTargets[manager]
-					for _, v := range mgr.Targets {
-						mapTargets[v] = true
-					}
-					s.DeleteTargets(mapTargets)
-					mgr.Targets = []string{}
-					s.C.AutoTargets[manager] = mgr
+					/*
+						mapTargets := make(map[string]bool)
+						mgr := s.C.AutoTargets[manager]
+						for _, v := range mgr.GetTargets() {
+							mapTargets[v] = true
+						}
+						s.DeleteTargets(mapTargets)
+						mgr.Targets = []string{}
+						s.C.AutoTargets[manager] = mgr
+					*/
 				}()
 
 				for {
@@ -183,7 +236,7 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						break
 					}
 					switch manager {
-					case "dcos":
+					case "dcos", "marathon":
 						log.Debugf("Autodiscovery: starting marathon dragnet app discovery")
 						ctx = context.Background()
 						ctx, cancel = context.WithCancel(ctx)
@@ -198,36 +251,71 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: marathon task fetch timeout. continuing...")
-                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
-                    log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
 							continue
 						}
 						newTargets := make(map[string]bool)
-						var listTargets []string
-						atConfig := s.C.AutoTargets[manager]
+						atConfig := *s.C.GetAutoTargetConfig(manager)
 						for _, target := range targetGroups {
-							if atConfig.ServiceName == target.Source {
+							if atConfig.GetServiceName() == target.Source {
 								for _, label := range target.Targets {
-									newTargets[string(label["__address__"])] = true
-									listTargets = append(listTargets, string(label["__address__"]))
+									app := string(label["__address__"])
+									// let's skip the target if it matches the current host
+									if (strings.HasPrefix(app, s.C.SourceHost)) && (s.C.SourceHost != "") {
+										log.Debugf("Autodiscovery(): skipping app %s for matching source host %s", app, s.C.SourceHost)
+										continue
+									} else {
+										newTargets[app] = true
+										log.Debugf("Autodiscovery(): adding dcos dragnet app %s", app)
+									}
 								}
 							}
 						}
-						// stegen - will do something better here someday, maybe.
-						mgr := s.C.AutoTargets[manager]
-						mgr.Targets = listTargets
-						s.C.AutoTargets[manager] = mgr
-						s.UpdateTargets(newTargets)
+						atConfig.SetTargets(newTargets)
+					case "kubernetes":
+						ctx = context.Background()
+						ctx, cancel = context.WithCancel(ctx)
+						ts = make(chan []*targetgroup.Group)
+						discovery := d.(*kubernetes.Discovery)
+						go discovery.Run(ctx, ts)
+						select {
+						case <-ts:
+							targetGroups = <-ts
+							cancel()
+							log.Debugf("Autodiscovery: kubernetes task fetch complete.")
+							break
+						case <-time.After(taskTimeout * time.Second):
+							log.Debugf("Autodiscovery: kubernetes task fetch timeout. continuing...")
+							continue
+						}
+						newTargets := make(map[string]bool)
+						atConfig := *s.C.GetAutoTargetConfig(manager)
+						for _, target := range targetGroups {
+							source := string(target.Labels["__meta_kubernetes_pod_label_app"])
+							if atConfig.GetServiceName() == source {
+								for _, label := range target.Targets {
+									app := string(label["__address__"])
+									// let's skip the target if it matches the current host
+									if (strings.HasPrefix(app, s.C.SourceHost)) && (s.C.SourceHost != "") {
+										log.Debugf("Autodiscovery(): skipping app %s for matching source host %s", app, s.C.SourceHost)
+										continue
+									} else {
+										newTargets[app] = true
+										log.Debugf("Autodiscovery(): adding kubernetes dragnet app %s", app)
+									}
+								}
+							}
+						}
+						atConfig.SetTargets(newTargets)
 					default:
-						// this shouldn't get hit
 						return nil
 					}
+
 					if stopDiscoverer() {
 						break
 					}
 
-                    refreshInterval := s.C.AutoTargets[manager].RefreshInterval
-                    refreshInterval.String()
+					//refreshInterval := s.C.AutoTargets[manager].RefreshInterval
+					//refreshInterval.String()
 					time.Sleep(taskRefresh * time.Second)
 				}
 				return nil
@@ -264,13 +352,67 @@ func (s *SafeConfig) StopAutoDiscoverers() error {
 	return nil
 }
 
-type AutoTarget struct {
-	Servers          []string                `yaml:"servers,omitempty"`
-	ServiceName      string                  `yaml:"service_name"`
-	RefreshInterval  model.Duration          `yaml:"refresh_interval,omitempty"`
-	AuthToken        config.Secret           `yaml:"auth_token"`
-	HTTPClientConfig config.HTTPClientConfig `yaml:",inline"`
-	Targets          []string                `yaml:"targets"`
+type Target interface {
+	GetServiceName() string
+	GetConfig() interface{}
+	GetTargets() map[string]bool
+	SetTargets(map[string]bool)
+}
+
+type KubernetesTarget struct {
+	ServiceName string              `yaml:"service_name,omitempty"`
+	targets     map[string]bool     `yaml:"-"`
+	Targets     []string            `yaml:"targets,omitempty"`
+	Config      kubernetes.SDConfig `yaml:",inline"`
+}
+
+func (t KubernetesTarget) GetServiceName() string {
+	return t.ServiceName
+}
+
+func (t KubernetesTarget) GetConfig() interface{} {
+	return t.Config
+}
+
+func (t KubernetesTarget) GetTargets() map[string]bool {
+	return t.targets
+}
+
+func (t *KubernetesTarget) SetTargets(targets map[string]bool) {
+	var listTargets []string
+	for key := range targets {
+		listTargets = append(listTargets, key)
+	}
+	t.targets = targets
+	t.Targets = listTargets
+}
+
+type MarathonTarget struct {
+	ServiceName string            `yaml:"service_name,omitempty"`
+	targets     map[string]bool   `yaml:"-"`
+	Targets     []string          `yaml:"targets,omitempty"`
+	Config      marathon.SDConfig `yaml:",inline"`
+}
+
+func (t MarathonTarget) GetServiceName() string {
+	return t.ServiceName
+}
+
+func (t MarathonTarget) GetConfig() interface{} {
+	return t.Config
+}
+
+func (t MarathonTarget) GetTargets() map[string]bool {
+	return t.targets
+}
+
+func (t *MarathonTarget) SetTargets(targets map[string]bool) {
+	var listTargets []string
+	for key := range targets {
+		listTargets = append(listTargets, key)
+	}
+	t.targets = targets
+	t.Targets = listTargets
 }
 
 type Module struct {
@@ -339,4 +481,38 @@ type DNSProbe struct {
 type DNSRRValidator struct {
 	FailIfMatchesRegexp    []string `yaml:"fail_if_matches_regexp,omitempty"`
 	FailIfNotMatchesRegexp []string `yaml:"fail_if_not_matches_regexp,omitempty"`
+}
+
+func getMarathonDiscoveryConfig(config interface{}) (*MarathonTarget, error) {
+	var (
+		cfg        MarathonTarget
+		err        error
+		yamlConfig []byte
+	)
+	yamlConfig, err = yaml.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(yamlConfig, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func getKubernetesDiscoveryConfig(config interface{}) (*KubernetesTarget, error) {
+	var (
+		cfg        KubernetesTarget
+		err        error
+		yamlConfig []byte
+	)
+	yamlConfig, err = yaml.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(yamlConfig, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }

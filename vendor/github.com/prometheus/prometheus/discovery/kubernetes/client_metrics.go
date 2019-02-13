@@ -245,20 +245,53 @@ func (f *clientGoWorkqueueMetricsProvider) Register(registerer prometheus.Regist
 	registerer.MustRegister(clientGoWorkqueueLongestRunningProcessorMetricVec)
 }
 
-func (f *clientGoWorkqueueMetricsProvider) NewDepthMetric(name string) workqueue.GaugeMetric {
-	return clientGoWorkqueueDepthMetricVec.WithLabelValues(name)
-}
-func (f *clientGoWorkqueueMetricsProvider) NewAddsMetric(name string) workqueue.CounterMetric {
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedAddsMetric(name string) workqueue.CounterMetric {
 	return clientGoWorkqueueAddsMetricVec.WithLabelValues(name)
 }
-func (f *clientGoWorkqueueMetricsProvider) NewLatencyMetric(name string) workqueue.SummaryMetric {
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedDepthMetric(name string) workqueue.GaugeMetric {
+	return clientGoWorkqueueDepthMetricVec.WithLabelValues(name)
+}
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedLatencyMetric(name string) workqueue.SummaryMetric {
 	metric := clientGoWorkqueueLatencyMetricVec.WithLabelValues(name)
 	// Convert microseconds to seconds for consistency across metrics.
 	return prometheus.ObserverFunc(func(v float64) {
 		metric.Observe(v / 1e6)
 	})
 }
-func (f *clientGoWorkqueueMetricsProvider) NewWorkDurationMetric(name string) workqueue.SummaryMetric {
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedLongestRunningProcessorMicrosecondsMetric(name string) workqueue.SettableGaugeMetric {
+	metric := clientGoWorkqueueLongestRunningProcessorMetricVec.WithLabelValues(name)
+	return gaugeSetFunc(func(v float64) {
+		metric.Set(v / 1e6)
+	})
+}
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedRetriesMetric(name string) workqueue.CounterMetric {
+	// Retries are not used so the metric is omitted.
+	return noopMetric{}
+}
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedUnfinishedWorkSecondsMetric(name string) workqueue.SettableGaugeMetric {
+	return clientGoWorkqueueUnfinishedWorkSecondsMetricVec.WithLabelValues(name)
+}
+func (f *clientGoWorkqueueMetricsProvider) NewDeprecatedWorkDurationMetric(name string) workqueue.SummaryMetric {
+	metric := clientGoWorkqueueWorkDurationMetricVec.WithLabelValues(name)
+	// Convert microseconds to seconds for consistency across metrics.
+	return prometheus.ObserverFunc(func(v float64) {
+		metric.Observe(v / 1e6)
+	})
+}
+func (f *clientGoWorkqueueMetricsProvider) NewDepthMetric(name string) workqueue.GaugeMetric {
+	return clientGoWorkqueueDepthMetricVec.WithLabelValues(name)
+}
+func (f *clientGoWorkqueueMetricsProvider) NewAddsMetric(name string) workqueue.CounterMetric {
+	return clientGoWorkqueueAddsMetricVec.WithLabelValues(name)
+}
+func (f *clientGoWorkqueueMetricsProvider) NewLatencyMetric(name string) workqueue.HistogramMetric {
+	metric := clientGoWorkqueueLatencyMetricVec.WithLabelValues(name)
+	// Convert microseconds to seconds for consistency across metrics.
+	return prometheus.ObserverFunc(func(v float64) {
+		metric.Observe(v / 1e6)
+	})
+}
+func (f *clientGoWorkqueueMetricsProvider) NewWorkDurationMetric(name string) workqueue.HistogramMetric {
 	metric := clientGoWorkqueueWorkDurationMetricVec.WithLabelValues(name)
 	// Convert microseconds to seconds for consistency across metrics.
 	return prometheus.ObserverFunc(func(v float64) {
@@ -267,6 +300,13 @@ func (f *clientGoWorkqueueMetricsProvider) NewWorkDurationMetric(name string) wo
 }
 func (f *clientGoWorkqueueMetricsProvider) NewUnfinishedWorkSecondsMetric(name string) workqueue.SettableGaugeMetric {
 	return clientGoWorkqueueUnfinishedWorkSecondsMetricVec.WithLabelValues(name)
+}
+func (f *clientGoWorkqueueMetricsProvider) NewLongestRunningProcessorSecondsMetric(name string) workqueue.SettableGaugeMetric {
+    metric := clientGoWorkqueueLongestRunningProcessorMetricVec.WithLabelValues(name)
+    return gaugeSetFunc(func(v float64) {
+        metric.Set(v)
+    })
+
 }
 func (f *clientGoWorkqueueMetricsProvider) NewLongestRunningProcessorMicrosecondsMetric(name string) workqueue.SettableGaugeMetric {
 	metric := clientGoWorkqueueLongestRunningProcessorMetricVec.WithLabelValues(name)

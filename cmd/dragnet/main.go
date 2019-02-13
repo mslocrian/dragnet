@@ -87,8 +87,7 @@ func generateHandler(w http.ResponseWriter, r *http.Request) {
 
 func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, registry *prometheus.Registry) {
 	var (
-		wg     sync.WaitGroup
-		source string
+		wg sync.WaitGroup
 	)
 	wg = sync.WaitGroup{}
 	targets := c.GetTargets()
@@ -115,11 +114,6 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 
 	prober := prober.ProbeHTTP
 	module := c.Modules["http_2xx"]
-	if c.SourceHost != "" {
-		source = environment.GetVar(c.SourceHost)
-	} else {
-		source = environment.GetVar("env:DRAGNET_HOST")
-	}
 
 	maxGoRoutines := 30
 	guard := make(chan struct{}, maxGoRoutines)
@@ -128,9 +122,9 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 		wg.Add(1)
 		go func(t string) {
 			start := time.Now()
-			success := prober(ctx, source, target, module, registry)
+			success := prober(ctx, c.SourceHost, target, module, registry)
 			duration := time.Since(start).Seconds()
-			probeDurationGauge.With(prometheus.Labels{"target": target, "source": source}).Set(duration)
+			probeDurationGauge.With(prometheus.Labels{"target": target, "source": c.SourceHost}).Set(duration)
 			if success {
 				probeSuccessGauge.With(prometheus.Labels{"target": target}).Set(1)
 			}

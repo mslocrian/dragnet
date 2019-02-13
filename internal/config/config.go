@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mslocrian/dragnet/internal/environment"
+
 	"github.com/matryer/runner"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
@@ -123,6 +125,12 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 	}
 	for _, target := range c.Targets {
 		targets[target] = true
+	}
+
+	if s.C.SourceHost != "" {
+		c.SourceHost = environment.GetVar(s.C.SourceHost)
+	} else {
+		c.SourceHost = environment.GetVar("env:DRAGNET_HOST")
 	}
 
 	s.Lock()
@@ -251,8 +259,14 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							if atConfig.GetServiceName() == target.Source {
 								for _, label := range target.Targets {
 									app := string(label["__address__"])
-									newTargets[app] = true
-									log.Debugf("Autodiscovery(): adding dcos dragnet app %s", app)
+									// let's skip the target if it matches the current host
+									if (strings.HasPrefix(app, s.C.SourceHost)) && (s.C.SourceHost != "") {
+										log.Debugf("Autodiscovery(): skipping app %s for matching source host %s", app, s.C.SourceHost)
+										continue
+									} else {
+										newTargets[app] = true
+										log.Debugf("Autodiscovery(): adding dcos dragnet app %s", app)
+									}
 								}
 							}
 						}
@@ -280,8 +294,14 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							if atConfig.GetServiceName() == source {
 								for _, label := range target.Targets {
 									app := string(label["__address__"])
-									newTargets[app] = true
-									log.Debugf("Autodiscovery(): adding kubernetes dragnet app %s", app)
+									// let's skip the target if it matches the current host
+									if (strings.HasPrefix(app, s.C.SourceHost)) && (s.C.SourceHost != "") {
+										log.Debugf("Autodiscovery(): skipping app %s for matching source host %s", app, s.C.SourceHost)
+										continue
+									} else {
+										newTargets[app] = true
+										log.Debugf("Autodiscovery(): adding kubernetes dragnet app %s", app)
+									}
 								}
 							}
 						}

@@ -28,11 +28,11 @@ const (
 type Config struct {
 	AutoTargets       map[string]interface{} `yaml:"autotargets"`
 	DiscoveryManagers map[string]interface{} `yaml:"-"`
-	Includes          []string               `yaml:"include"`
+	Includes          []string               `yaml:"include,omitempty"`
 	Modules           map[string]Module      `yaml:"modules"`
-	Targets           []string               `yaml:"targets"`
-	SourceHost        string                 `yaml:"source_host"`
-	autoTargetsConfig map[string]Target      `yaml:"-"`
+	Targets           []string               `yaml:"targets,omitempty"`
+	SourceHost        string                 `yaml:"source_host,omitempty"`
+	autoTargetsConfig map[string]*Target      `yaml:"-"`
 	targets           map[string]bool        `yaml:"-"`
 }
 
@@ -133,27 +133,44 @@ func (s *SafeConfig) ReloadConfig(cfg string) error {
 }
 
 func (c *Config) GetTargets() map[string]bool {
-	return c.targets
+	var resTargets map[string]bool
+	resTargets = make(map[string]bool)
+	for key := range c.AutoTargets {
+		mgr := *c.GetAutoTargetConfig(key)
+		for k, v := range mgr.GetTargets() {
+			resTargets[k] = v
+		}
+	}
+
+    // loop over static config targets
+	for k, v := range c.targets {
+		resTargets[k] = v
+	}
+	return resTargets
 }
 
 func (c *Config) SetTargets(targets map[string]bool) {
 	c.targets = targets
 }
 
-func (c *Config) GetAutoTargetConfig(key string) Target {
+func (c *Config) GetAutoTargetConfig(key string) *Target {
 	if target, ok := c.autoTargetsConfig[key]; ok {
 		return target
 	} else {
 		var res Target
-		return res
+		return &res
 	}
+}
+
+func (c *Config) GetAutoTargets() map[string]*Target {
+    return c.autoTargetsConfig
 }
 
 func (c *Config) SetAutoTargetConfig(key string, target Target) {
 	if c.autoTargetsConfig == nil {
-		c.autoTargetsConfig = make(map[string]Target)
+		c.autoTargetsConfig = make(map[string]*Target)
 	}
-	c.autoTargetsConfig[key] = target
+	c.autoTargetsConfig[key] = &target
 }
 
 func (s *SafeConfig) UpdateTargets(t map[string]bool) {
@@ -226,29 +243,20 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: marathon task fetch timeout. continuing...")
-							//refreshInterval := s.C.AutoTargets[manager].RefreshInterval
-							//log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
 							continue
 						}
 						newTargets := make(map[string]bool)
-						var listTargets []string
-						atConfig := s.C.GetAutoTargetConfig(manager)
+						atConfig := *s.C.GetAutoTargetConfig(manager)
 						for _, target := range targetGroups {
 							if atConfig.GetServiceName() == target.Source {
 								for _, label := range target.Targets {
-									newTargets[string(label["__address__"])] = true
-									listTargets = append(listTargets, string(label["__address__"]))
+									app := string(label["__address__"])
+									newTargets[app] = true
+									log.Debugf("Autodiscovery(): adding dcos dragnet app %s", app)
 								}
 							}
 						}
-						// stegen - will do something better here someday, maybe.
-						// stegen defo have to look at this
-						/*
-							mgr := s.C.AutoTargets[manager]
-							mgr.Targets = listTargets
-							s.C.AutoTargets[manager] = mgr
-							s.UpdateTargets(newTargets)
-						*/
+                        atConfig.SetTargets(newTargets)
 					case "kubernetes":
 						log.Debugf("WE HIT SOMETHING KUBERNETES!")
 						ctx = context.Background()
@@ -264,28 +272,27 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: kubernetes task fetch timeout. continuing...")
-							//refreshInterval := s.C.AutoTargets[manager].RefreshInterval
-							//log.Debugf("refreshInterval.String()==%#v", refreshInterval.String())
 							continue
 						}
 						newTargets := make(map[string]bool)
-						var listTargets []string
-						atConfig := s.C.GetAutoTargetConfig(manager)
+						atConfig := *s.C.GetAutoTargetConfig(manager)
 						for _, target := range targetGroups {
-                            log.Debugf("WAT! target=%#v", target)
-                            log.Debugf("WATTT %#v", target.Labels["__meta_kubernetes_pod_label_app"])
-                            source := target.Labels["__meta_kubernetes_pod_label_app"])
-							if atConfig.GetServiceName() == ousrce {
+							source := string(target.Labels["__meta_kubernetes_pod_label_app"])
+							if atConfig.GetServiceName() == source {
 								for _, label := range target.Targets {
-									newTargets[string(label["__address__"])] = true
-									listTargets = append(listTargets, string(label["__address__"]))
+									app := string(label["__address__"])
+									newTargets[app] = true
+									log.Debugf("Autodiscovery(): adding kubernetes dragnet app %s", app)
 								}
 							}
 						}
+                        log.Debugf("KUBERNETES OLD: atConfig=%#v", atConfig)
+                        atConfig.SetTargets(newTargets)
+                        log.Debugf("KUBERNETES NEW: atConfig=%#v", atConfig)
 					default:
-						// this shouldn't get hit
 						return nil
 					}
+
 					if stopDiscoverer() {
 						break
 					}
@@ -332,11 +339,13 @@ type Target interface {
 	GetServiceName() string
 	GetConfig() interface{}
 	GetTargets() map[string]bool
+    SetTargets(map[string]bool)
 }
 
 type KubernetesTarget struct {
 	ServiceName string              `yaml:"service_name,omitempty"`
-	Targets     map[string]bool     `yaml:"targets"`
+	targets     map[string]bool     `yaml:"-"`
+	Targets     []string            `yaml:"targets,omitempty"`
 	Config      kubernetes.SDConfig `yaml:",inline"`
 }
 
@@ -349,12 +358,26 @@ func (t KubernetesTarget) GetConfig() interface{} {
 }
 
 func (t KubernetesTarget) GetTargets() map[string]bool {
-	return t.Targets
+	return t.targets
+}
+
+func (t KubernetesTarget) SetTargets(targets map[string]bool) {
+    var listTargets []string
+    log.Debugf("KubernetesTarget::SetTargets(): setting targets to: %#v", targets)
+
+    for key := range targets {
+        listTargets = append(listTargets, key)
+    }
+    log.Debugf("KubernetesTarget::SetTargets(): WAS t=%#v", t)
+    t.targets = targets
+    t.Targets = listTargets
+    log.Debugf("KubernetesTarget::SetTargets(): IS NOW t=%#v", t)
 }
 
 type MarathonTarget struct {
 	ServiceName string            `yaml:"service_name,omitempty"`
-	Targets     map[string]bool   `yaml:"targets"`
+	targets     map[string]bool   `yaml:"-"`
+	Targets     []string          `yaml:"targets,omitempty"`
 	Config      marathon.SDConfig `yaml:",inline"`
 }
 
@@ -367,7 +390,19 @@ func (t MarathonTarget) GetConfig() interface{} {
 }
 
 func (t MarathonTarget) GetTargets() map[string]bool {
-	return t.Targets
+	return t.targets
+}
+
+func (t MarathonTarget) SetTargets(targets map[string]bool) {
+    var listTargets []string
+    log.Debugf("MarathonTarget::SetTargets(): setting targets to: %#v", targets)
+
+    for key := range targets {
+        listTargets = append(listTargets, key)
+    }
+    t.targets = targets
+    t.Targets = listTargets
+    log.Debugf("MarathonTarget::SetTargets(): t=%#v", t)
 }
 
 type Module struct {

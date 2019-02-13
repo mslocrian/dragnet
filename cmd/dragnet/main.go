@@ -91,7 +91,9 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 		source string
 	)
 	wg = sync.WaitGroup{}
+    log.Errorf("HERE I AM 1")
 	targets := c.GetTargets()
+    log.Errorf("HERE I AM 2: targets=%#v", targets)
 
 	// If a timeout is configured via the Prometheus header, add it to the request
 	var timeoutSeconds float64
@@ -288,8 +290,21 @@ func main() {
 	})
 
 	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+        type ConfigConversion struct {
+            AutoTargets map[string]*config.Target `yaml:"autotargets,omitempty"`
+            Includes []string `yaml:"include,omitempty"`
+            Modules map[string]config.Module `yaml:"modules,omitempty"`
+            SourceHost string `yaml:"source_host,omitempty"`
+            Targets []string `yaml:"targets,omitempty"`
+        }
+        var cfg ConfigConversion
 		sc.RLock()
-		c, err := yaml.Marshal(sc.C)
+        cfg.AutoTargets = sc.C.GetAutoTargets()
+        cfg.Includes = sc.C.Includes
+        cfg.Modules = sc.C.Modules
+        cfg.SourceHost = sc.C.SourceHost
+        cfg.Targets = sc.C.Targets
+		c, err := yaml.Marshal(cfg)
 		sc.RUnlock()
 		if err != nil {
 			log.Warnf("Error marshaling configuration. err=%v", err)

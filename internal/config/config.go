@@ -32,7 +32,7 @@ type Config struct {
 	Modules           map[string]Module      `yaml:"modules"`
 	Targets           []string               `yaml:"targets,omitempty"`
 	SourceHost        string                 `yaml:"source_host,omitempty"`
-	autoTargetsConfig map[string]*Target      `yaml:"-"`
+	autoTargetsConfig map[string]*Target     `yaml:"-"`
 	targets           map[string]bool        `yaml:"-"`
 }
 
@@ -142,7 +142,7 @@ func (c *Config) GetTargets() map[string]bool {
 		}
 	}
 
-    // loop over static config targets
+	// loop over static config targets
 	for k, v := range c.targets {
 		resTargets[k] = v
 	}
@@ -163,7 +163,7 @@ func (c *Config) GetAutoTargetConfig(key string) *Target {
 }
 
 func (c *Config) GetAutoTargets() map[string]*Target {
-    return c.autoTargetsConfig
+	return c.autoTargetsConfig
 }
 
 func (c *Config) SetAutoTargetConfig(key string, target Target) {
@@ -256,9 +256,8 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 								}
 							}
 						}
-                        atConfig.SetTargets(newTargets)
+						atConfig.SetTargets(newTargets)
 					case "kubernetes":
-						log.Debugf("WE HIT SOMETHING KUBERNETES!")
 						ctx = context.Background()
 						ctx, cancel = context.WithCancel(ctx)
 						ts = make(chan []*targetgroup.Group)
@@ -286,9 +285,7 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 								}
 							}
 						}
-                        log.Debugf("KUBERNETES OLD: atConfig=%#v", atConfig)
-                        atConfig.SetTargets(newTargets)
-                        log.Debugf("KUBERNETES NEW: atConfig=%#v", atConfig)
+						atConfig.SetTargets(newTargets)
 					default:
 						return nil
 					}
@@ -339,7 +336,7 @@ type Target interface {
 	GetServiceName() string
 	GetConfig() interface{}
 	GetTargets() map[string]bool
-    SetTargets(map[string]bool)
+	SetTargets(map[string]bool)
 }
 
 type KubernetesTarget struct {
@@ -361,17 +358,13 @@ func (t KubernetesTarget) GetTargets() map[string]bool {
 	return t.targets
 }
 
-func (t KubernetesTarget) SetTargets(targets map[string]bool) {
-    var listTargets []string
-    log.Debugf("KubernetesTarget::SetTargets(): setting targets to: %#v", targets)
-
-    for key := range targets {
-        listTargets = append(listTargets, key)
-    }
-    log.Debugf("KubernetesTarget::SetTargets(): WAS t=%#v", t)
-    t.targets = targets
-    t.Targets = listTargets
-    log.Debugf("KubernetesTarget::SetTargets(): IS NOW t=%#v", t)
+func (t *KubernetesTarget) SetTargets(targets map[string]bool) {
+	var listTargets []string
+	for key := range targets {
+		listTargets = append(listTargets, key)
+	}
+	t.targets = targets
+	t.Targets = listTargets
 }
 
 type MarathonTarget struct {
@@ -393,16 +386,13 @@ func (t MarathonTarget) GetTargets() map[string]bool {
 	return t.targets
 }
 
-func (t MarathonTarget) SetTargets(targets map[string]bool) {
-    var listTargets []string
-    log.Debugf("MarathonTarget::SetTargets(): setting targets to: %#v", targets)
-
-    for key := range targets {
-        listTargets = append(listTargets, key)
-    }
-    t.targets = targets
-    t.Targets = listTargets
-    log.Debugf("MarathonTarget::SetTargets(): t=%#v", t)
+func (t *MarathonTarget) SetTargets(targets map[string]bool) {
+	var listTargets []string
+	for key := range targets {
+		listTargets = append(listTargets, key)
+	}
+	t.targets = targets
+	t.Targets = listTargets
 }
 
 type Module struct {
@@ -473,7 +463,7 @@ type DNSRRValidator struct {
 	FailIfNotMatchesRegexp []string `yaml:"fail_if_not_matches_regexp,omitempty"`
 }
 
-func getMarathonDiscoveryConfig(config interface{}) (Target, error) {
+func getMarathonDiscoveryConfig(config interface{}) (*MarathonTarget, error) {
 	var (
 		cfg        MarathonTarget
 		err        error
@@ -481,16 +471,16 @@ func getMarathonDiscoveryConfig(config interface{}) (Target, error) {
 	)
 	yamlConfig, err = yaml.Marshal(config)
 	if err != nil {
-		return MarathonTarget{}, err
+		return nil, err
 	}
 	err = yaml.Unmarshal(yamlConfig, &cfg)
 	if err != nil {
-		return MarathonTarget{}, err
+		return nil, err
 	}
-	return cfg, nil
+	return &cfg, nil
 }
 
-func getKubernetesDiscoveryConfig(config interface{}) (Target, error) {
+func getKubernetesDiscoveryConfig(config interface{}) (*KubernetesTarget, error) {
 	var (
 		cfg        KubernetesTarget
 		err        error
@@ -498,11 +488,11 @@ func getKubernetesDiscoveryConfig(config interface{}) (Target, error) {
 	)
 	yamlConfig, err = yaml.Marshal(config)
 	if err != nil {
-		return KubernetesTarget{}, err
+		return nil, err
 	}
 	err = yaml.Unmarshal(yamlConfig, &cfg)
 	if err != nil {
-		return KubernetesTarget{}, err
+		return nil, err
 	}
-	return cfg, nil
+	return &cfg, nil
 }

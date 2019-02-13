@@ -91,9 +91,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 		source string
 	)
 	wg = sync.WaitGroup{}
-    log.Errorf("HERE I AM 1")
 	targets := c.GetTargets()
-    log.Errorf("HERE I AM 2: targets=%#v", targets)
 
 	// If a timeout is configured via the Prometheus header, add it to the request
 	var timeoutSeconds float64
@@ -132,7 +130,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request, c *config.Config, regi
 			start := time.Now()
 			success := prober(ctx, source, target, module, registry)
 			duration := time.Since(start).Seconds()
-			probeDurationGauge.With(prometheus.Labels{"target": target}).Set(duration)
+			probeDurationGauge.With(prometheus.Labels{"target": target, "source": source}).Set(duration)
 			if success {
 				probeSuccessGauge.With(prometheus.Labels{"target": target}).Set(1)
 			}
@@ -182,7 +180,7 @@ func init() {
 	probeDurationGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "dragnet_probe_duration_seconds",
 		Help: "Returns how long the probe took to complete in seconds",
-	}, []string{"target"})
+	}, []string{"source", "target"})
 }
 
 func main() {
@@ -290,20 +288,20 @@ func main() {
 	})
 
 	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-        type ConfigConversion struct {
-            AutoTargets map[string]*config.Target `yaml:"autotargets,omitempty"`
-            Includes []string `yaml:"include,omitempty"`
-            Modules map[string]config.Module `yaml:"modules,omitempty"`
-            SourceHost string `yaml:"source_host,omitempty"`
-            Targets []string `yaml:"targets,omitempty"`
-        }
-        var cfg ConfigConversion
+		type ConfigConversion struct {
+			AutoTargets map[string]*config.Target `yaml:"autotargets,omitempty"`
+			Includes    []string                  `yaml:"include,omitempty"`
+			Modules     map[string]config.Module  `yaml:"modules,omitempty"`
+			SourceHost  string                    `yaml:"source_host,omitempty"`
+			Targets     []string                  `yaml:"targets,omitempty"`
+		}
+		var cfg ConfigConversion
 		sc.RLock()
-        cfg.AutoTargets = sc.C.GetAutoTargets()
-        cfg.Includes = sc.C.Includes
-        cfg.Modules = sc.C.Modules
-        cfg.SourceHost = sc.C.SourceHost
-        cfg.Targets = sc.C.Targets
+		cfg.AutoTargets = sc.C.GetAutoTargets()
+		cfg.Includes = sc.C.Includes
+		cfg.Modules = sc.C.Modules
+		cfg.SourceHost = sc.C.SourceHost
+		cfg.Targets = sc.C.Targets
 		c, err := yaml.Marshal(cfg)
 		sc.RUnlock()
 		if err != nil {

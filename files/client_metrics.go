@@ -302,10 +302,10 @@ func (f *clientGoWorkqueueMetricsProvider) NewUnfinishedWorkSecondsMetric(name s
 	return clientGoWorkqueueUnfinishedWorkSecondsMetricVec.WithLabelValues(name)
 }
 func (f *clientGoWorkqueueMetricsProvider) NewLongestRunningProcessorSecondsMetric(name string) workqueue.SettableGaugeMetric {
-    metric := clientGoWorkqueueLongestRunningProcessorMetricVec.WithLabelValues(name)
-    return gaugeSetFunc(func(v float64) {
-        metric.Set(v)
-    })
+	metric := clientGoWorkqueueLongestRunningProcessorMetricVec.WithLabelValues(name)
+	return gaugeSetFunc(func(v float64) {
+		metric.Set(v)
+	})
 
 }
 func (f *clientGoWorkqueueMetricsProvider) NewLongestRunningProcessorMicrosecondsMetric(name string) workqueue.SettableGaugeMetric {

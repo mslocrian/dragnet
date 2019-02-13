@@ -8,6 +8,7 @@ WORKDIR /go/src/github.com/mslocrian/dragnet
 
 COPY . .
 RUN rm -rf vendor/github.com/prometheus/prometheus/vendor
+RUN cp files/client_metrics.go vendor/github.com/prometheus/prometheus/discovery/kubernetes/client_metrics.go
 RUN make build-local
 
 FROM alpine:3.9

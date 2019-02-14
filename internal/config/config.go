@@ -15,7 +15,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/prometheus/common/config"
-	//"github.com/prometheus/common/model"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/prometheus/discovery/kubernetes"
 	"github.com/prometheus/prometheus/discovery/marathon"
@@ -246,11 +246,12 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						select {
 						case <-ts:
 							targetGroups = <-ts
-							cancel()
 							log.Debugf("Autodiscovery: marathon task fetch complete.")
+							cancel()
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: marathon task fetch timeout. continuing...")
+							cancel()
 							continue
 						}
 						newTargets := make(map[string]bool)
@@ -280,11 +281,12 @@ func (s *SafeConfig) StartAutoDiscoverers() {
 						select {
 						case <-ts:
 							targetGroups = <-ts
-							cancel()
 							log.Debugf("Autodiscovery: kubernetes task fetch complete.")
+							cancel()
 							break
 						case <-time.After(taskTimeout * time.Second):
 							log.Debugf("Autodiscovery: kubernetes task fetch timeout. continuing...")
+							cancel()
 							continue
 						}
 						newTargets := make(map[string]bool)
@@ -497,6 +499,11 @@ func getMarathonDiscoveryConfig(config interface{}) (*MarathonTarget, error) {
 	if err != nil {
 		return nil, err
 	}
+	// stegen - override RefreshInterval to 1s
+	// we ultimately end up sleeping for a
+	// different time after the marathon query.
+	duration, _ := model.ParseDuration("1s")
+	cfg.Config.RefreshInterval = duration
 	return &cfg, nil
 }
 

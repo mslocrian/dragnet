@@ -159,7 +159,8 @@ func setLogLevel(l string) log.Level {
 }
 
 func zeroMetricsRegistry(registry *prometheus.Registry) error {
-	log.Debugf("registry=%#v", registry)
+	// might not actually want to do anything here
+	//log.Debugf("registry=%#v", registry)
 	return nil
 }
 
